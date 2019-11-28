@@ -41,6 +41,8 @@ class fauxApiPfsenseInterface {
     public $config_default_filename = '/cf/conf/config.xml';
     public $config_reload_max_wait_secs = 60;
     
+    public $backup_config_filename = array();
+    
     /**
      * get_next_backup_config_filename()
      * 
@@ -98,6 +100,100 @@ class fauxApiPfsenseInterface {
         
         return \parse_xml_config($config_file, $this->config_xml_root);
     }
+    
+    /**
+     * config_patch()
+     * 
+     * @param array $config_patch
+     * @param boolean $do_backup
+     * @param boolean $do_reload
+     * @return boolean
+     */
+    public function config_patch($config_patch, $do_backup=TRUE, $do_reload=TRUE) {
+        fauxApiLogger::debug(__METHOD__, array(
+            'do_backup' => $do_backup,
+            'do_reload' => $do_reload
+        ));
+        
+        $config = $this->array_merge_recursive_distinct(
+                    $this->config_load($this->config_default_filename),
+                    $config_patch
+                );
+        
+        fauxApiLogger::info('config_patch merged with current config, attempting to save');
+        return $this->config_save($config, $do_backup, $do_reload);
+    }
+    
+    /**
+     * array_merge_recursive_distinct()
+     * 
+     * @param array $array1
+     * @param array $array2
+     * @return array
+     * @note adapted from http://php.net/manual/en/function.array-merge-recursive.php#92195
+     */
+    private function array_merge_recursive_distinct(array &$array1, array &$array2) {
+        $merged = $array1;
+        foreach ($array2 as $key => &$value) {
+            if (is_array($value) && !$this->is_numeric_array($value) && isset($merged[$key]) && is_array($merged[$key])) {
+                $merged[$key] = $this->array_merge_recursive_distinct($merged[$key], $value);
+            } else {
+                $merged[$key] = $value;
+            }
+        }
+        return $merged;
+    }
+    
+    /**
+     * is_numeric_array()
+     * 
+     * @param array $array
+     * @return bool
+     * @note adapted from https://codereview.stackexchange.com/questions/201/is-numeric-array-is-missing
+     */
+    private function is_numeric_array($array) {
+        return array_keys($array) === range(0,(count($array)-1));
+    }
+    
+    /**
+     * config_item_get()
+     * 
+     * @param string $item
+     * @return string
+     */
+    public function config_item_get($item) {
+        fauxApiLogger::debug(__METHOD__, array(
+            'item' => $item
+        ));
+        
+        // not yet implemented !!
+        fauxApiLogger::error('not yet implemented');
+        return FALSE;
+    }
+    
+    /**
+     * config_item_set()
+     * 
+     * @param string $item
+     * @param string $value
+     * @param boolean $do_insert
+     * @param boolean $do_backup
+     * @param boolean $do_reload
+     * @return boolean
+     */
+    public function config_item_set($item, $value, $do_insert=FALSE, $do_backup=TRUE, $do_reload=TRUE) {
+        fauxApiLogger::debug(__METHOD__, array(
+            'item' => $item,
+            'value' => $value,
+            'do_insert' => $do_insert,
+            'do_backup' => $do_backup,
+            'do_reload' => $do_reload
+        ));
+        
+        // not yet implemented !!
+        fauxApiLogger::error('not yet implemented');
+        return FALSE;
+    }
 
     /**
      * config_save()
@@ -120,6 +216,10 @@ class fauxApiPfsenseInterface {
             if (!is_file($config_backup_file)) {
                 return FALSE;
             }
+            $this->backup_config_filename[FAUXAPI_CALLID] = $config_backup_file;
+        }
+        else {
+            $this->backup_config_filename[FAUXAPI_CALLID] = FALSE;
         }
         
         $username = 'fauxapi-'.FAUXAPI_APIKEY.'@'.fauxApiUtils::get_client_ipaddr();
@@ -291,7 +391,9 @@ class fauxApiPfsenseInterface {
         while($wait_count_seconds < $this->config_reload_max_wait_secs) {
             
             // induce the pfsense config.cache to regenerate by requesting index.php
-            $cache_respawn_url = fauxApiUtils::get_request_scheme() . '://127.0.0.1/index.php?__fauxapi_callid='.FAUXAPI_CALLID;
+            $scheme = fauxApiUtils::get_request_scheme();
+            $port = fauxApiUtils::get_request_port();
+            $cache_respawn_url = $scheme . '://127.0.0.1:' . $port . '/index.php?__fauxapi_callid='.FAUXAPI_CALLID;
             $exec_command = 'curl --silent --insecure "'.addslashes($cache_respawn_url).'" > /dev/null';
             // unable to call file_get_contents() to a URL thus we resort to an exec!!
             fauxApiLogger::debug('exec curl', array(
@@ -398,20 +500,62 @@ class fauxApiPfsenseInterface {
         
         include_once '/usr/local/www/includes/functions.inc.php';
         
-        // NB: as per get_stats() in functions.inc.php
-        $stats['cpu']                   = strip_tags(\cpu_usage());
-        $stats['mem']                   = strip_tags(\mem_usage());
-        $stats['uptime']                = strip_tags(\get_uptime());
-        $stats['states']                = strip_tags(\get_pfstate());
-        $stats['temp']                  = strip_tags(\get_temp());
-        $stats['datetime']              = gmdate('Ymd\ZHis', strtotime((\update_date_time())));
-        $stats['interfacestatistics']   = strip_tags(\get_interfacestats());
-        $stats['interfacestatus']       = strip_tags(\get_interfacestatus());
-        $stats['cpufreq']               = strip_tags(\get_cpufreq());
-        $stats['load_average']          = explode(',',str_replace(' ','',strip_tags(\get_load_average())));
-        $stats['mbuf']                  = strip_tags(\get_mbuf());
-        $stats['mbufpercent']           = strip_tags(\get_mbuf(true));
-        $stats['statepercent']          = strip_tags(\get_pfstate(true));
+        // Mostly as per the get_stats() in functions.inc.php
+        // NB: calls are now wrapped in function_exists() because some functions
+        // have been removed in later versions of pfSense
+
+        if (function_exists('cpu_usage')) { 
+            $stats['cpu'] = strip_tags(\cpu_usage()); 
+        }
+        if (function_exists('mem_usage')) {
+            $stats['mem'] = strip_tags(\mem_usage());
+        }
+        if (function_exists('get_uptime')) {
+            $stats['uptime'] = strip_tags(\get_uptime());
+        }
+        if (function_exists('get_pfstate')) { 
+            $stats['pfstate'] = strip_tags(\get_pfstate());
+            $stats['pfstatepercent'] = strip_tags(\get_pfstate(true));
+        }
+        if (function_exists('get_temp')) {
+            $stats['temp'] = strip_tags(\get_temp()); 
+        }
+        if (function_exists('update_date_time')) { 
+            $stats['datetime'] = gmdate('Ymd\ZHis', strtotime((\update_date_time()))); 
+        }
+        if (function_exists('get_interfacestats')) { 
+            $stats['interfacestatistics'] = strip_tags(\get_interfacestats()); 
+        }
+        if (function_exists('get_interfacestatus')) { 
+            $stats['interfacestatus'] = strip_tags(\get_interfacestatus()); 
+        }
+        if (function_exists('get_cpufreq')) { 
+            $stats['cpufreq'] = strip_tags(\get_cpufreq()); 
+        }
+        if (function_exists('get_load_average')) { 
+            $stats['load_average'] = explode(',',str_replace(' ','',strip_tags(\get_load_average()))); 
+        }
+        
+        if (function_exists('get_mbuf')) {
+            
+            // Might be the worst hack work-around in history, but I'd love to 
+            // understand why pfSense developers decided to make the get_mbuf()
+            // function a pass-by-reference function in 2.4.x - if there is a 
+            // better way than this, drop me line!
+            
+            $content = file_get_contents('/usr/local/www/includes/functions.inc.php');
+            if (strpos($content, 'function get_mbuf(&$mbuf')) {
+                // pfSense 2.4.x
+                \get_mbuf($stats['mbuf'], $stats['mbufpercent']);
+                $stats['mbuf'] = strip_tags($stats['mbuf']);
+                $stats['mbufpercent'] = strip_tags($stats['mbufpercent']);
+            } else {
+                // pfSense 2.3.x
+                $stats['mbuf'] = strip_tags(\get_mbuf());
+                $stats['mbufpercent'] = strip_tags(\get_mbuf(true));
+                
+            }
+        }
         
         return $stats;
     }
@@ -463,7 +607,7 @@ class fauxApiPfsenseInterface {
             } elseif (strpos($line,'[') && strpos($line,']')) {
                 // Hack to make the output more easily parseable
                 $line = str_replace(': pid ', ': ', $line);
-                $line = str_replace('State Creations: ', 'StateCreations: ', $line);
+                $line = str_replace('State Creations: ', 'State_Creations: ', $line);
                 $line = strtolower($line);
                 
                 preg_match_all('/(\w+)\: ([0-9]+)/', $line, $m);
@@ -473,6 +617,7 @@ class fauxApiPfsenseInterface {
                     ));
                     return array();
                 } else {
+                    $rules[$rule]['number'] = $rule;
                     foreach($m[1] as $index=>$attribute) {
                         $rules[$rule][$attribute] = $m[2][$index];
                     }
@@ -557,13 +702,31 @@ class fauxApiPfsenseInterface {
     }
     
     /**
+     * interface_stats()
+     * 
+     * @param array $interface
+     * @return array
+     */
+    public function interface_stats($interface){
+        fauxApiLogger::debug(__METHOD__);
+        
+        if(is_null($interface)) {
+            $error_message = 'no interface parameter provided';
+            fauxApiLogger::error($error_message);
+            throw new \Exception($error_message);
+        }
+        
+        return \pfSense_get_interface_stats($interface);
+    }
+    
+    /**
      * function_call()
      * 
      * @param string $function
      * @param array $args
      * @param array $includes
      * @return array
-     * @note calls any (or most) functions available in pfSense if listed
+     * @note calls any (or most) functions available in pfSense if whitelisted in /etc/fauxapi_pfsense_interface.txt
      */
     public function function_call($function, $args, $includes) {
         fauxApiLogger::debug(__METHOD__, array(
@@ -571,6 +734,15 @@ class fauxApiPfsenseInterface {
             'args' => $args,
             'includes' => $includes,
         ));
+        
+        if(!is_file($this->config_pfsense_function_calls)) {
+            $error_message = 'required pfsense function calls file not found';
+            $error_data = array(
+                'filename' => $this->config_pfsense_function_calls
+            );
+            fauxApiLogger::error($error_message, $error_data);
+            throw new \Exception($error_message);
+        }
         
         // load and parse pfsense_function_calls.txt
         $pf_function_calls_raw = file_get_contents($this->config_pfsense_function_calls);
@@ -598,8 +770,8 @@ class fauxApiPfsenseInterface {
                 if(count($fn_matches) < 2) {
                     continue 1; 
                 }
-                if (isset($fn_matches[2]) && strlen($fn_matches[2]) > 0) {
-                    $fn_args = split(',',str_replace(' ','', $fn_matches[2]));
+                if(isset($fn_matches[2]) && strlen($fn_matches[2]) > 0) {
+                    $fn_args = explode(',',str_replace(' ','', $fn_matches[2]));
                 } else {
                     $fn_args = array();
                 }

@@ -1,8 +1,8 @@
 # $FreeBSD$
 
 PORTNAME=	pfSense-pkg-FauxAPI
-PORTVERSION=	1.2
-PORTREVISION=	2
+PORTVERSION=	1.3
+PORTREVISION=	5
 CATEGORIES=	sysutils
 MASTER_SITES=	# empty
 DISTFILES=	# empty
@@ -32,9 +32,9 @@ do-install:
 		${STAGEDIR}/etc/inc/priv
 
 	${MKDIR} ${STAGEDIR}/etc/fauxapi
-	${INSTALL_DATA} -m 0600 ${FILESDIR}/etc/fauxapi/credentials.ini \
+	${INSTALL_DATA} -m 0600 ${FILESDIR}/etc/fauxapi/credentials.sample.ini \
 		${STAGEDIR}/etc/fauxapi
-	${INSTALL_DATA} -m 0644 ${FILESDIR}/etc/fauxapi/pfsense_function_calls.txt \
+	${INSTALL_DATA} -m 0644 ${FILESDIR}/etc/fauxapi/pfsense_function_calls.sample.txt \
 		${STAGEDIR}/etc/fauxapi
 
 	${MKDIR} ${STAGEDIR}${PREFIX}/www/fauxapi

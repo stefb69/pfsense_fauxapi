@@ -91,7 +91,8 @@ class fauxApiActions {
         $this->response->message = 'ok';
         $this->response->data = array(
             'do_backup' => $do_backup, 
-            'do_reload' => $do_reload);
+            'do_reload' => $do_reload,
+            'previous_config_file' => $this->PfsenseInterface->backup_config_filename[FAUXAPI_CALLID]);
         return TRUE;
     }
     
@@ -100,17 +101,94 @@ class fauxApiActions {
      * 
      * @param array $__args
      * @return boolean
+     */
     public function config_patch($__args) {
         fauxApiLogger::debug(__METHOD__);
         
         $do_backup = TRUE;
         $do_reload = TRUE;
-        $path = NULL;
-        $value = NULL;
         extract($__args, EXTR_IF_EXISTS);
         
+        // patch the config data
+        if (!$this->PfsenseInterface->config_patch($this->action_input_data, $do_backup, $do_reload)) {
+            $this->response->http_code = 500;
+            $this->response->message = 'failed to patch config data';
+            return FALSE;
+        }
+        
+        $this->response->http_code = 200;
+        $this->response->message = 'ok';
+        $this->response->data = array(
+            'do_backup' => $do_backup, 
+            'do_reload' => $do_reload,
+            'previous_config_file' => $this->PfsenseInterface->backup_config_filename[FAUXAPI_CALLID]);
+        return TRUE;
     }
+    
+    /**
+     * config_item_get()
+     * 
+     * @param array $__args
+     * @return boolean
      */
+    public function config_item_get($__args) {
+        fauxApiLogger::debug(__METHOD__);
+        
+        $item = NULL;
+        extract($__args, EXTR_IF_EXISTS);
+        
+        $value = $this->PfsenseInterface->config_item_get($item);
+        
+        if (FALSE === $value) {
+            $this->response->http_code = 500;
+            $this->response->message = 'unable to get config item value';
+            $this->response->data = array(
+                'item' => $item);
+            return FALSE;
+        }
+        $this->response->http_code = 200;
+        $this->response->message = 'ok';
+        $this->response->data = array(
+            'item' => $item, 
+            'value' => $value);
+        return TRUE;
+    }
+    
+    /**
+     * config_item_set()
+     * 
+     * @param array $__args
+     * @return boolean
+     */
+    public function config_item_set($__args) {
+        fauxApiLogger::debug(__METHOD__);
+        
+        $item = NULL;
+        $do_backup = TRUE;
+        $do_reload = TRUE;
+        $do_insert = FALSE;
+        extract($__args, EXTR_IF_EXISTS);
+        
+        if (!$this->PfsenseInterface->config_item_set($item, $this->action_input_data, $do_insert, $do_backup, $do_reload)) {
+            $this->response->http_code = 500;
+            $this->response->message = 'failed to set config item value';
+            $this->response->data = array(
+                'item' => $item,
+                'value' => $value);
+            return FALSE;
+        }
+        
+        $this->response->http_code = 200;
+        $this->response->message = 'ok';
+        $this->response->data = array(
+            'item' => $item,
+            'value' => $value,
+            'do_insert' => $do_insert, 
+            'do_backup' => $do_backup, 
+            'do_reload' => $do_reload,
+            'previous_config_file' => $this->PfsenseInterface->backup_config_filename[FAUXAPI_CALLID]);
+        return TRUE;
+    }
     
     /**
      * config_reload()
@@ -261,6 +339,32 @@ class fauxApiActions {
         if (empty($stats)) {
             $this->response->http_code = 500;
             $this->response->message = 'unable to get system stats';
+            return FALSE;
+        }
+        $this->response->http_code = 200;
+        $this->response->message = 'ok';
+        $this->response->data = array(
+            'stats' => $stats
+        );
+        return TRUE;
+    }
+    
+    /**
+     * interface_stats()
+     * 
+     * @return boolean
+     */
+    public function interface_stats($__args) {
+        fauxApiLogger::debug(__METHOD__);
+        
+        $interface = NULL;
+        extract($__args, EXTR_IF_EXISTS);
+        
+        $stats = $this->PfsenseInterface->interface_stats($interface);
+        
+        if (empty($stats)) {
+            $this->response->http_code = 500;
+            $this->response->message = 'unable to get interface stats';
             return FALSE;
         }
         $this->response->http_code = 200;

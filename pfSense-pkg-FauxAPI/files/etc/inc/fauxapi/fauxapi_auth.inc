@@ -45,7 +45,7 @@ class fauxApiAuth {
         }
 
         // make sure the AUTH is well formed and has expected input
-        $elements = split(':', fauxApiUtils::sanitize($_SERVER['HTTP_FAUXAPI_AUTH'], array(':')));
+        $elements = explode(':', fauxApiUtils::sanitize($_SERVER['HTTP_FAUXAPI_AUTH'], array(':')));
         if (4 !== count($elements)) {
             fauxApiLogger::error('unexpected number of FAUXAPI_AUTH elements supplied', array(
                 $elements
@@ -118,7 +118,7 @@ class fauxApiAuth {
         }
         
         define('FAUXAPI_APIKEY', $auth['apikey']);
-        fauxApiLogger::info('valid auth for call', array(
+        fauxApiLogger::debug('valid auth for call', array(
             'apikey' => FAUXAPI_APIKEY,
             'callid' => FAUXAPI_CALLID,
             'client_ip' => fauxApiUtils::get_client_ipaddr()
